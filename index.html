@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="bg">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1b4dd8">
+<title>MultiChat – групов чат в реално време</title>
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<style>
+:root{
+  --bg:#eef2f8; --panel:#ffffff; --ink:#13203a; --muted:#6a7791; --line:#dbe2ee;
+  --brand:#1b4dd8; --brand-ink:#ffffff; --me:#1b4dd8; --me-ink:#fff; --other:#e8edf6;
+  --ok:#1fa971; --warn:#e5484d; --coral:#ff6b57;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#0c1424; --panel:#131d33; --ink:#e8eefb; --muted:#8c9bb8; --line:#24314d;
+    --brand:#4d83ff; --brand-ink:#08112a; --me:#2f61e6; --me-ink:#fff; --other:#1c2946;
+  }
+}
+*{box-sizing:border-box;margin:0}
+html,body{height:100%}
+body{font:16px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--ink);
+  padding:env(safe-area-inset-top,0) env(safe-area-inset-right,0) env(safe-area-inset-bottom,0) env(safe-area-inset-left,0)}
+button,input{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:3px solid var(--brand);outline-offset:2px}
+.hidden{display:none!important}
+
+/* ---------- Начален екран ---------- */
+#setup{min-height:100%;display:flex;justify-content:center;align-items:flex-start;padding:24px 16px}
+.card{width:100%;max-width:520px;background:var(--panel);border:1px solid var(--line);border-radius:20px;padding:28px 24px;
+  box-shadow:0 18px 50px -24px rgba(19,32,58,.35)}
+.logo{display:flex;align-items:center;gap:12px;margin-bottom:6px}
+.logo i{display:grid;place-items:center;width:44px;height:44px;border-radius:14px;background:var(--brand);color:var(--brand-ink);font-style:normal;font-weight:800;font-size:22px}
+h1{font-size:28px;letter-spacing:-.02em}
+.lead{color:var(--muted);margin-bottom:22px}
+label{display:block;font-weight:600;margin:14px 0 6px}
+input[type=text]{width:100%;padding:13px 14px;border:1.5px solid var(--line);border-radius:12px;background:var(--bg);outline:none}
+input[type=text]:focus{border-color:var(--brand)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:13px 18px;border:0;border-radius:12px;font-weight:700;background:var(--brand);color:var(--brand-ink);width:100%}
+.btn:hover{filter:brightness(1.08)}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.btn.ghost{background:transparent;color:var(--ink);border:1.5px solid var(--line)}
+.or{display:flex;align-items:center;gap:12px;color:var(--muted);margin:18px 0 4px;font-size:14px}
+.or::before,.or::after{content:"";flex:1;height:1px;background:var(--line)}
+.joinrow{display:flex;gap:10px}
+.joinrow input{flex:1;text-transform:uppercase;letter-spacing:.2em;font-weight:700;text-align:center}
+.joinrow .btn{width:auto}
+#err{color:var(--warn);font-weight:600;min-height:22px;margin-top:12px}
+details{margin-top:20px;border-top:1px solid var(--line);padding-top:14px}
+summary{cursor:pointer;font-weight:700}
+details ol{padding-left:20px;margin:10px 0;color:var(--muted)}
+details li{margin:6px 0}
+details b{color:var(--ink)}
+.note{font-size:14px;color:var(--muted);margin-top:8px}
+
+/* ---------- Чат екран ---------- */
+#chat{height:100%;display:flex;flex-direction:column;max-width:1000px;margin:0 auto;background:var(--panel);
+  border-left:1px solid var(--line);border-right:1px solid var(--line)}
+header{display:flex;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid var(--line)}
+header .logo{margin:0;gap:10px;flex:1;min-width:0}
+header .logo i{width:36px;height:36px;font-size:18px;border-radius:11px}
+.room{font-weight:800;letter-spacing:.14em}
+.sub{font-size:13px;color:var(--muted)}
+.status{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--ok);margin-right:6px}
+.status.off{background:var(--warn)}
+.sm{padding:9px 12px;font-size:14px;width:auto}
+.body{flex:1;min-height:0;display:flex}
+#users{display:flex;flex-direction:column;gap:6px;width:210px;padding:14px;border-right:1px solid var(--line);overflow:auto;flex-shrink:0}
+#users h2{font-size:14px;color:var(--muted);font-weight:600;margin-bottom:4px}
+.user{display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:10px;background:var(--bg);font-size:15px;min-width:0}
+.user span.n{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.user::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--ok);flex-shrink:0}
+.tag{font-size:11px;font-weight:700;color:#fff;background:var(--coral);border-radius:6px;padding:1px 6px;margin-left:auto;flex-shrink:0}
+.main{flex:1;min-width:0;display:flex;flex-direction:column}
+#msgs{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:8px;scroll-behavior:smooth}
+.msg{max-width:78%;padding:9px 13px;border-radius:16px;background:var(--other);word-wrap:break-word;overflow-wrap:anywhere;white-space:pre-wrap}
+.msg .who{font-size:12.5px;font-weight:700;color:var(--brand);margin-bottom:2px}
+.msg time{display:block;font-size:11px;opacity:.65;margin-top:3px;text-align:right}
+.msg.me{align-self:flex-end;background:var(--me);color:var(--me-ink);border-bottom-right-radius:5px}
+.msg.me .who{display:none}
+.msg.other{align-self:flex-start;border-bottom-left-radius:5px}
+.sys{align-self:center;font-size:13px;color:var(--muted);background:var(--bg);padding:4px 12px;border-radius:99px;text-align:center}
+form{display:flex;gap:10px;padding:12px 14px;border-top:1px solid var(--line)}
+form input{flex:1;min-width:0;padding:13px 16px;border-radius:99px}
+form .btn{width:auto;border-radius:99px;padding:13px 22px}
+
+@media (max-width:700px){
+  #users{width:auto;flex-direction:row;align-items:center;padding:8px 12px;border-right:0;border-bottom:1px solid var(--line);overflow-x:auto;overflow-y:hidden;flex-shrink:0}
+  .body{flex-direction:column}
+  #users h2{display:none}
+  .user{white-space:nowrap;flex-shrink:0}
+  .msg{max-width:88%}
+  #chat{border:0}
+}
+@media (prefers-reduced-motion:reduce){#msgs{scroll-behavior:auto}}
+</style>
+</head>
+<body>
+
+<!-- ========== НАЧАЛЕН ЕКРАН ========== -->
+<main id="setup">
+  <div class="card">
+    <div class="logo"><i>M</i><h1>MultiChat</h1></div>
+    <p class="lead">Групов чат между устройства в реално време. Без регистрация и без сървър.</p>
+
+    <label for="name">Твоето име</label>
+    <input type="text" id="name" maxlength="20" placeholder="Например: Иван" autocomplete="nickname">
+
+    <div style="margin-top:18px"><button class="btn" id="create">Създай нова стая</button></div>
+
+    <div class="or">или се присъедини към стая</div>
+    <div class="joinrow">
+      <input type="text" id="code" maxlength="6" placeholder="КОД" aria-label="Код на стаята" autocomplete="off">
+      <button class="btn ghost" id="join">Влез</button>
+    </div>
+    <div id="err" role="alert"></div>
+
+    <details open>
+      <summary>Как да свържа три устройства</summary>
+      <ol>
+        <li><b>Устройство 1:</b> отвори тази страница, въведи име и натисни „Създай нова стая“. Ще получиш 5-символен код.</li>
+        <li>В чата натисни „Копирай линк“ и го изпрати на другите устройства, или им кажи кода.</li>
+        <li><b>Устройство 2 и 3:</b> отворят линка (кодът се попълва сам) или въведат кода, после име и „Влез“.</li>
+        <li>Готово! Всички онлайн потребители се виждат в списъка и съобщенията пристигат веднага.</li>
+      </ol>
+      <p class="note">Устройството, което създава стаята, е „домакин“. Ако затвори страницата, чатът приключва за всички. Устройствата могат да са в различни мрежи (Wi-Fi, мобилни данни).</p>
+    </details>
+  </div>
+</main>
+
+<!-- ========== ЧАТ ЕКРАН ========== -->
+<div id="chat" class="hidden">
+  <header>
+    <div class="logo"><i>M</i>
+      <div style="min-width:0">
+        <div>Стая <span class="room" id="roomLabel"></span></div>
+        <div class="sub"><span class="status" id="dot"></span><span id="statusText">Свързан</span></div>
+      </div>
+    </div>
+    <button class="btn ghost sm" id="copy">Копирай линк</button>
+    <button class="btn ghost sm" id="leave">Изход</button>
+  </header>
+  <div class="body">
+    <aside id="users" aria-label="Онлайн потребители"></aside>
+    <section class="main">
+      <div id="msgs" aria-live="polite"></div>
+      <form id="form" autocomplete="off">
+        <input type="text" id="text" maxlength="1000" placeholder="Напиши съобщение…" aria-label="Съобщение">
+        <button class="btn" type="submit" id="send">Изпрати</button>
+      </form>
+    </section>
+  </div>
+</div>
+
+<script>
+(function(){
+  'use strict';
+  var PREFIX = 'multichat-v1-';
+  var $ = function(id){ return document.getElementById(id); };
+
+  var peer = null, hostConn = null;
+  var isHost = false, room = '', myName = '';
+  var clients = {};          // само при домакин: peerId -> {conn, name}
+  var users = [];            // имена на онлайн потребителите (първият е домакинът)
+  var connected = false;
+
+  /* ---------- помощни ---------- */
+  function clean(s, max){ return String(s || '').replace(/\s+/g, ' ').trim().slice(0, max); }
+  function genCode(){
+    var abc = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789', c = '';
+    for (var i = 0; i < 5; i++) c += abc[Math.floor(Math.random() * abc.length)];
+    return c;
+  }
+  function uniqueName(name){
+    var taken = [myName].concat(Object.keys(clients).map(function(k){ return clients[k].name; }));
+    var n = name, i = 2;
+    while (taken.indexOf(n) !== -1) n = name + ' ' + (i++);
+    return n;
+  }
+  function showError(t){ $('err').textContent = t || ''; }
+  function setBusy(b){ $('create').disabled = $('join').disabled = b; }
+  function fmtTime(ts){ return new Date(ts).toLocaleTimeString('bg-BG', {hour:'2-digit', minute:'2-digit'}); }
+
+  /* ---------- показване ---------- */
+  function addMsg(m){
+    var el = document.createElement('div');
+    var mine = m.from === myName;
+    el.className = 'msg ' + (mine ? 'me' : 'other');
+    var who = document.createElement('div'); who.className = 'who'; who.textContent = m.from;
+    var txt = document.createElement('div'); txt.textContent = m.text;
+    var tm = document.createElement('time'); tm.textContent = fmtTime(m.ts);
+    el.appendChild(who); el.appendChild(txt); el.appendChild(tm);
+    push(el);
+  }
+  function addSys(text){
+    var el = document.createElement('div'); el.className = 'sys'; el.textContent = text; push(el);
+  }
+  function push(el){
+    var box = $('msgs');
+    var near = box.scrollHeight - box.scrollTop - box.clientHeight < 120;
+    box.appendChild(el);
+    if (near || el.classList.contains('me')) box.scrollTop = box.scrollHeight;
+  }
+  function renderUsers(){
+    var box = $('users'); box.innerHTML = '';
+    var h = document.createElement('h2'); h.textContent = 'Онлайн (' + users.length + ')'; box.appendChild(h);
+    users.forEach(function(n, i){
+      var d = document.createElement('div'); d.className = 'user';
+      var s = document.createElement('span'); s.className = 'n'; s.textContent = n + (n === myName ? ' (ти)' : '');
+      d.appendChild(s);
+      if (i === 0){ var t = document.createElement('span'); t.className = 'tag'; t.textContent = 'домакин'; d.appendChild(t); }
+      box.appendChild(d);
+    });
+  }
+  function setStatus(ok, text){
+    connected = ok;
+    $('dot').className = 'status' + (ok ? '' : ' off');
+    $('statusText').textContent = text;
+    $('text').disabled = $('send').disabled = !ok;
+  }
+  function enterChat(){
+    $('setup').classList.add('hidden');
+    $('chat').classList.remove('hidden');
+    $('roomLabel').textContent = room;
+    setStatus(true, isHost ? 'Ти си домакин' : 'Свързан');
+    renderUsers();
+    $('text').focus();
+  }
+
+  /* ---------- домакин ---------- */
+  function broadcast(m){
+    Object.keys(clients).forEach(function(k){
+      var c = clients[k].conn; if (c.open) c.send(m);
+    });
+  }
+  function refreshUsers(){
+    users = [myName].concat(Object.keys(clients).map(function(k){ return clients[k].name; }));
+    broadcast({t:'users', list:users});
+    renderUsers();
+  }
+  function hostSys(text){ broadcast({t:'sys', text:text}); addSys(text); }
+  function hostReceive(c, d){
+    if (!d || typeof d !== 'object') return;
+    if (d.t === 'join' && !clients[c.peer]){
+      var name = uniqueName(clean(d.name, 20) || 'Гост');
+      clients[c.peer] = {conn:c, name:name};
+      c.send({t:'welcome', name:name, room:room});
+      refreshUsers();
+      hostSys(name + ' се присъедини');
+    } else if (d.t === 'msg' && clients[c.peer]){
+      var text = String(d.text || '').trim().slice(0, 1000);
+      if (!text) return;
+      var m = {t:'msg', from:clients[c.peer].name, text:text, ts:Date.now()};
+      broadcast(m); addMsg(m);
+    }
+  }
+  function hostDrop(c){
+    var u = clients[c.peer]; if (!u) return;
+    delete clients[c.peer];
+    refreshUsers();
+    hostSys(u.name + ' напусна');
+  }
+  function startHost(attempt){
+    room = genCode();
+    peer = new Peer(PREFIX + room);
+    peer.on('open', function(){
+      isHost = true; users = [myName];
+      enterChat();
+      addSys('Стаята е създадена. Покани други с кода ' + room + ' или с бутона „Копирай линк“.');
+    });
+    peer.on('connection', function(c){
+      c.on('data', function(d){ hostReceive(c, d); });
+      c.on('close', function(){ hostDrop(c); });
+      c.on('error', function(){ hostDrop(c); });
+    });
+    peer.on('error', function(e){
+      if (e.type === 'unavailable-id' && attempt < 5){ peer.destroy(); startHost(attempt + 1); return; }
+      if (!connected && $('chat').classList.contains('hidden')){ fail(e); }
+      else setStatus(false, 'Грешка във връзката: ' + e.type);
+    });
+    peer.on('disconnected', function(){ if (peer && !peer.destroyed) peer.reconnect(); });
+  }
+
+  /* ---------- гост ---------- */
+  function startGuest(){
+    peer = new Peer();
+    var timer = setTimeout(function(){ if (!connected){ fail({type:'timeout'}); } }, 12000);
+    peer.on('open', function(){
+      hostConn = peer.connect(PREFIX + room, {reliable:true});
+      hostConn.on('open', function(){ hostConn.send({t:'join', name:myName}); });
+      hostConn.on('data', function(d){
+        if (!d || typeof d !== 'object') return;
+        if (d.t === 'welcome'){ clearTimeout(timer); myName = d.name; isHost = false; enterChat(); }
+        else if (d.t === 'msg') addMsg(d);
+        else if (d.t === 'sys') addSys(d.text);
+        else if (d.t === 'users'){ users = d.list; renderUsers(); }
+      });
+      hostConn.on('close', function(){ setStatus(false, 'Връзката прекъсна'); addSys('Домакинът напусна. Чатът приключи – натисни „Изход“ и започни нова стая.'); });
+      hostConn.on('error', function(){ setStatus(false, 'Грешка във връзката'); });
+    });
+    peer.on('error', function(e){
+      clearTimeout(timer);
+      if (!connected) fail(e); else setStatus(false, 'Грешка: ' + e.type);
+    });
+  }
+
+  function fail(e){
+    var t = e && e.type;
+    var msg = t === 'peer-unavailable' ? 'Стаята не е намерена. Провери кода и дали домакинът е още онлайн.'
+            : t === 'timeout' ? 'Връзката не успя. Провери интернета и опитай пак.'
+            : t === 'network' || t === 'server-error' || t === 'socket-error' ? 'Няма връзка със сървъра за свързване. Опитай отново след малко.'
+            : 'Грешка при свързване (' + (t || 'неизвестна') + ').';
+    if (peer){ try{ peer.destroy(); }catch(_){} peer = null; }
+    showError(msg); setBusy(false);
+  }
+
+  /* ---------- действия ---------- */
+  function readName(){
+    var n = clean($('name').value, 20);
+    if (!n){ showError('Въведи име, за да продължиш.'); $('name').focus(); return null; }
+    try{ localStorage.setItem('multichat-name', n); }catch(_){}
+    return n;
+  }
+  $('create').onclick = function(){
+    showError(''); var n = readName(); if (!n) return;
+    myName = n; setBusy(true); startHost(0);
+  };
+  $('join').onclick = function(){
+    showError(''); var n = readName(); if (!n) return;
+    var c = $('code').value.trim().toUpperCase();
+    if (c.length < 4){ showError('Въведи кода на стаята.'); $('code').focus(); return; }
+    myName = n; room = c; setBusy(true); startGuest();
+  };
+  $('code').addEventListener('keydown', function(e){ if (e.key === 'Enter') $('join').click(); });
+  $('name').addEventListener('keydown', function(e){
+    if (e.key === 'Enter') ($('code').value.trim() ? $('join') : $('create')).click();
+  });
+
+  $('form').addEventListener('submit', function(e){
+    e.preventDefault();
+    var text = $('text').value.trim().slice(0, 1000);
+    if (!text || !connected) return;
+    $('text').value = '';
+    if (isHost){
+      var m = {t:'msg', from:myName, text:text, ts:Date.now()};
+      broadcast(m); addMsg(m);
+    } else if (hostConn && hostConn.open){
+      hostConn.send({t:'msg', text:text});
+    }
+    $('text').focus();
+  });
+
+  $('copy').onclick = function(){
+    var link = location.origin + location.pathname + '?room=' + room;
+    var done = function(){ $('copy').textContent = 'Копирано!'; setTimeout(function(){ $('copy').textContent = 'Копирай линк'; }, 1800); };
+    if (navigator.clipboard && window.isSecureContext){ navigator.clipboard.writeText(link).then(done, function(){ window.prompt('Копирай линка:', link); }); }
+    else window.prompt('Копирай линка:', link);
+  };
+  $('leave').onclick = function(){
+    if (peer){ try{ peer.destroy(); }catch(_){} }
+    location.href = location.pathname;
+  };
+
+  /* ---------- старт ---------- */
+  try{ $('name').value = localStorage.getItem('multichat-name') || ''; }catch(_){}
+  var q = new URLSearchParams(location.search).get('room');
+  if (q){ $('code').value = q.toUpperCase().slice(0, 6); if (!$('name').value) $('name').focus(); else $('join').focus(); }
+  else $('name').focus();
+  if (typeof Peer === 'undefined') showError('Не успях да заредя PeerJS. Провери интернет връзката и презареди страницата.');
+})();
+</script>
+</body>
+</html>
